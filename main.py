@@ -1,7 +1,7 @@
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QLine
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QGridLayout, \
     QLineEdit, QPushButton, QMainWindow, QTableWidget, QTableWidgetItem, \
-    QDialog, QVBoxLayout, QComboBox, QToolBar, QStatusBar, QMessageBox
+    QDialog, QVBoxLayout, QComboBox, QToolBar, QStatusBar, QMessageBox, QPlainTextEdit
 from PyQt6.QtGui import QAction, QIcon, QColor
 import sys
 import sqlite3
@@ -14,6 +14,7 @@ class DatabaseConnection:
     def connect(self):
         connection = sqlite3.connect(self.database_file)
         return connection
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -80,7 +81,8 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def search(self):
-        pass
+        dialog = SearchDialog()
+        dialog.exec()
 
     def edit(self):
         pass
@@ -119,7 +121,7 @@ class InsertDialog(QDialog):
         layout.addWidget(self.priority)
 
         self.note = QLineEdit()
-        # self.note.setPlaceholderText("Note")
+        self.note.setPlaceholderText("Note")
         layout.addWidget(self.note)
 
         button = QPushButton("Submit")
@@ -147,6 +149,86 @@ class InsertDialog(QDialog):
         self.close()
 
 
+class SearchDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Search Todo")
+        self.setFixedWidth(300)
+        self.setFixedHeight(300)
+
+        layout = QVBoxLayout()
+
+        layout.addWidget(QLabel("Description:"))
+        self.description = QLineEdit()
+        layout.addWidget(self.description)
+
+        layout.addWidget(QLabel("Label:"))
+        self.label = QComboBox()
+        labels = ["", "Work", "Private", "Other"]
+        self.label.addItems(labels)
+        layout.addWidget(self.label)
+
+        layout.addWidget(QLabel("Priority:"))
+        self.priority = QComboBox()
+        priorties = ["", "Low", "Medium", "High"]
+        self.priority.addItems(priorties)
+        layout.addWidget(self.priority)
+
+        layout.addWidget(QLabel("Note:"))
+        self.note = QLineEdit()
+        layout.addWidget(self.note)
+        layout.addWidget(QLabel())
+
+        button = QPushButton("Search")
+        button.clicked.connect(self.search)
+        layout.addWidget(button)
+
+        self.setLayout(layout)
+
+    def search(self):
+
+        description = self.description.text().capitalize()
+        label = self.label.itemText(self.label.currentIndex())
+        priority = self.priority.itemText(self.priority.currentIndex())
+        note = self.note.text().capitalize()
+
+        conditions = []
+        values = []
+
+        if description:
+            conditions.append("description LIKE ?")
+            values.append(f"%{description}%")
+        if label:
+            conditions.append("label = ?")
+            values.append(label)
+        if priority:
+            conditions.append("priority = ?")
+            values.append(priority)
+        if note:
+            conditions.append("note LIKE ?")
+            values.append(f"%{note}%")
+
+        if conditions:
+            query = "SELECT * FROM todos WHERE " + " AND ".join(conditions)
+            print(f"query: {query}")
+
+            connection = DatabaseConnection().connect()
+            cursor = connection.cursor()
+            result = cursor.execute(query, tuple(values))
+            todo_app.table.clearSelection()
+
+            for row in result:
+                print(row)
+                items = todo_app.table.findItems(str(row[0]), Qt.MatchFlag.MatchFixedString)
+                print(items)
+                for item in items:
+                    todo_app.table.item(item.row(), 1).setSelected(True)
+
+            cursor.close()
+            connection.close()
+
+        self.close()
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -154,4 +236,3 @@ if __name__ == "__main__":
     todo_app.show()
     todo_app.load_table()
     sys.exit(app.exec())
-
