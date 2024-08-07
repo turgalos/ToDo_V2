@@ -1,8 +1,8 @@
 from PyQt6.QtCore import Qt, QSize, QLine
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget, QGridLayout, \
     QLineEdit, QPushButton, QMainWindow, QTableWidget, QTableWidgetItem, \
-    QDialog, QVBoxLayout, QComboBox, QToolBar, QStatusBar, QMessageBox, QPlainTextEdit
-from PyQt6.QtGui import QAction, QIcon, QColor
+    QDialog, QVBoxLayout, QComboBox, QToolBar, QHeaderView
+from PyQt6.QtGui import QAction, QIcon, QColor, QFont
 import sys
 import sqlite3
 
@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("To-do App V2")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(550, 500)
 
         add_todo_action = QAction(QIcon("icons/add.png"), "Add Todo", self)
         add_todo_action.triggered.connect(self.insert)
@@ -55,8 +55,21 @@ class MainWindow(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(("Id", "Description", "Label", "Priority", "Note"))
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # self.table.setColumnWidth(0, 20)
+        # self.table.setColumnWidth(1, 200)
         self.table.verticalHeader().setVisible(False)
+        header_font = QFont()
+        header_font.setPointSize(10)
+        header_font.setBold(True)
+        text_font = QFont()
+        text_font.setPointSize(10)
+        self.table.horizontalHeader().setFont(header_font)
+        self.table.setFont(text_font)
         self.setCentralWidget(self.table)
+
+        #TODO:
+        #dodać tabelkę obok todosów na ściągę calli?
 
     def load_table(self):
         connection = DatabaseConnection().connect()
@@ -66,6 +79,8 @@ class MainWindow(QMainWindow):
             self.table.insertRow(row_number)
             for column_number, data in enumerate(row_data):
                 item = QTableWidgetItem(str(data))
+                if column_number == 0:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if column_number == 3:
                     if data.lower() == 'low':
                         item.setBackground(QColor(144, 238, 144))
@@ -85,7 +100,8 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def edit(self):
-        pass
+        dialog = EditDialog()
+        dialog.exec()
 
     def move_up(self):
         pass
@@ -94,7 +110,16 @@ class MainWindow(QMainWindow):
         pass
 
     def delete(self):
-        pass
+        index = todo_app.table.currentRow()
+        id_to_del = todo_app.table.item(index, 0).text()
+        connection = DatabaseConnection().connect()
+        cursor = connection.cursor()
+        cursor.execute("DELETE FROM todos WHERE id = ?",(id_to_del, ))
+        connection.commit()
+        cursor.close()
+        connection.close()
+        todo_app.load_table()
+
 
 
 class InsertDialog(QDialog):
@@ -111,12 +136,12 @@ class InsertDialog(QDialog):
         layout.addWidget(self.description)
 
         self.label = QComboBox()
-        labels = ["Work", "Private", "Other"]
+        labels = ["", "Work", "Private", "Other"]
         self.label.addItems(labels)
         layout.addWidget(self.label)
 
         self.priority = QComboBox()
-        priorties = ["Low", "Medium", "High"]
+        priorties = ["", "Low", "Medium", "High"]
         self.priority.addItems(priorties)
         layout.addWidget(self.priority)
 
@@ -210,7 +235,7 @@ class SearchDialog(QDialog):
 
         if conditions:
             query = "SELECT * FROM todos WHERE " + " AND ".join(conditions)
-            print(f"query: {query}")
+            # print(f"query: {query}")
 
             connection = DatabaseConnection().connect()
             cursor = connection.cursor()
@@ -218,14 +243,69 @@ class SearchDialog(QDialog):
             todo_app.table.clearSelection()
 
             for row in result:
-                print(row)
                 items = todo_app.table.findItems(str(row[0]), Qt.MatchFlag.MatchFixedString)
-                print(items)
                 for item in items:
                     todo_app.table.item(item.row(), 1).setSelected(True)
 
             cursor.close()
             connection.close()
+
+        self.close()
+
+class EditDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Edit Todo")
+        self.setFixedWidth(300)
+        self.setFixedHeight(300)
+
+        self.index = todo_app.table.currentRow()
+        self.id = todo_app.table.item(self.index, 0).text()
+
+        layout = QVBoxLayout()
+
+        self.description = QLineEdit()
+        self.description.setText(todo_app.table.item(self.index, 1).text())
+        layout.addWidget(self.description)
+
+        self.label = QComboBox()
+        labels = ["", "Work", "Private", "Other"]
+        self.label.addItems(labels)
+        current_label = todo_app.table.item(self.index, 2).text()
+        self.label.setCurrentText(current_label)
+        layout.addWidget(self.label)
+
+        self.priority = QComboBox()
+        priorties = ["", "Low", "Medium", "High"]
+        self.priority.addItems(priorties)
+        current_priority = todo_app.table.item(self.index, 3).text()
+        self.priority.setCurrentText(current_priority)
+        layout.addWidget(self.priority)
+
+        self.note = QLineEdit()
+        self.note.setText(todo_app.table.item(self.index, 4).text())
+        layout.addWidget(self.note)
+
+        button = QPushButton("Submit")
+        button.clicked.connect(self.edit_todo)
+        layout.addWidget(button)
+
+        self.setLayout(layout)
+
+    def edit_todo(self):
+        description = self.description.text().capitalize()
+        label = self.label.itemText(self.label.currentIndex())
+        priority = self.priority.itemText(self.priority.currentIndex())
+        note = self.note.text().capitalize()
+
+        connection = DatabaseConnection().connect()
+        cursor = connection.cursor()
+        cursor.execute("UPDATE todos SET description = ?, label = ?, priority  = ?, note=? WHERE id = ?",
+                       (description, label, priority, note, self.id))
+        connection.commit()
+        cursor.close()
+        connection.close()
+        todo_app.load_table()
 
         self.close()
 
